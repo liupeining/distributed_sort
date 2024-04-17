@@ -13,8 +13,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var connsInProcess int
-var mutex sync.Mutex
+//var connsInProcess int
+//var mutex sync.Mutex
 
 type Record struct {
 	Key   [10]byte
@@ -58,6 +58,7 @@ func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Lis
 
 func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 	defer conn.Close()
+	defer wg.Done()
 	buffer := make([]byte, 1024)
 	for {
 		n, err := conn.Read(buffer)
@@ -69,9 +70,10 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 		}
 		fmt.Println("Received", n, "bytes from", conn.RemoteAddr())
 		if buffer[0] == 1 {
-			mutex.Lock()
-			connsInProcess--
-			mutex.Unlock()
+			//mutex.Lock()
+			//connsInProcess--
+			//mutex.Unlock()
+			break
 		}
 		if buffer[0] == 0 {
 			var record Record
@@ -80,17 +82,20 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 			fmt.Println("Received record", record)
 			recordsChan <- record
 
-			// temproary because we are not using the stream_complete
-			mutex.Lock()
-			connsInProcess--
-			mutex.Unlock()
-		}
-		if connsInProcess == 1 {
-			fmt.Println(">>>>>>>>>>>>All connections received")
-			wg.Done()
-			close(recordsChan)
+			// temporary break
 			break
+			//// temproary because we are not using the stream_complete
+			//mutex.Lock()
+			//connsInProcess--
+			//mutex.Unlock()
 		}
+		//if connsInProcess == 1 {
+		//	fmt.Println(">>>>>>>>>>>>All connections received")
+		//	wg.Done()
+		//	close(recordsChan)
+		//	break
+		//}
+
 	}
 }
 
@@ -178,14 +183,14 @@ func main() {
 		Implement Distributed Sort
 	*/
 	go processRecords()
-	connsInProcess = len(scs.Servers)
+	//connsInProcess = len(scs.Servers)
 
 	// step 1: begin listening
 	serverAddress := net.JoinHostPort(scs.Servers[serverId].Host, scs.Servers[serverId].Port)
 	listener := initListener(serverId, serverAddress, scs)
 	defer listener.Close()
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(len(scs.Servers) - 1)
 	go acceptConnection(listener, &wg)
 
 	// step 2: dial other servers
@@ -198,4 +203,5 @@ func main() {
 	sendRecords(inputFile, conns)
 
 	wg.Wait()
+	close(recordsChan)
 }
