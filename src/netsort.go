@@ -16,6 +16,13 @@ import (
 var connsInProcess int
 var mutex sync.Mutex
 
+type Record struct {
+	Key   [10]byte
+	Value [90]byte
+}
+
+var recordsChan = make(chan Record)
+
 type ServerConfigs struct {
 	Servers []struct {
 		ServerId int    `yaml:"serverId"`
@@ -37,12 +44,15 @@ func readServerConfigs(configPath string) ServerConfigs {
 	return scs
 }
 
+func fatalOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %v", msg, err)
+	}
+}
+
 func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Listener {
 	listener, err := net.Listen("tcp", serverAddress)
-	if err != nil {
-		log.Fatalf("Server %d could not listen on %s : %v", serverId, serverAddress, err)
-	}
-	fmt.Println(">>>>>>>>>>>Server", serverId, "listener initiated")
+	fatalOnError(err, fmt.Sprintf("Server %d could not listen on %s", serverId, serverAddress))
 	return listener
 }
 
@@ -57,13 +67,28 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 			}
 			break
 		}
-		fmt.Printf("Received '%s' from %s\n", string(buffer[:n]), conn.RemoteAddr())
-		mutex.Lock()
-		connsInProcess--
-		mutex.Unlock()
+		fmt.Println("Received", n, "bytes from", conn.RemoteAddr())
+		if buffer[0] == 1 {
+			mutex.Lock()
+			connsInProcess--
+			mutex.Unlock()
+		}
+		if buffer[0] == 0 {
+			var record Record
+			copy(record.Key[:], buffer[1:11])
+			copy(record.Value[:], buffer[11:])
+			fmt.Println("Received record", record)
+			recordsChan <- record
+
+			// temproary because we are not using the stream_complete
+			mutex.Lock()
+			connsInProcess--
+			mutex.Unlock()
+		}
 		if connsInProcess == 1 {
 			fmt.Println(">>>>>>>>>>>>All connections received")
 			wg.Done()
+			close(recordsChan)
 			break
 		}
 	}
@@ -72,10 +97,7 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 func acceptConnection(listener net.Listener, wg *sync.WaitGroup) {
 	for {
 		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatalf("Error in accepting connection %v", err)
-		}
-		fmt.Println("Accepted connection from", conn.RemoteAddr())
+		fatalOnError(err, "Could not accept connection")
 		go handleConnection(conn, wg)
 	}
 }
@@ -87,7 +109,6 @@ func connectToServer(address string) net.Conn {
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}
-		fmt.Println("successfully connected to", address)
 		return conn
 	}
 }
@@ -102,6 +123,37 @@ func connectToAllServers(scs ServerConfigs, serverId int) []net.Conn {
 		conns = append(conns, connectToServer(address))
 	}
 	return conns
+}
+
+func openInputFile(inputFilePath string) *os.File {
+	file, err := os.Open(inputFilePath)
+	fatalOnError(err, fmt.Sprintf("Error in opening input file %s", inputFilePath))
+	return file
+}
+
+func processRecords() {
+	for record := range recordsChan {
+		fmt.Println("Processed record:", record)
+	}
+}
+
+func connsClose(conns []net.Conn) {
+	for _, conn := range conns {
+		conn.Close()
+	}
+}
+
+func sendRecords(inputFile *os.File, conns []net.Conn) {
+	//(for now, just the first record in input file)
+	buffer := make([]byte, 101)
+	buffer[0] = 0
+	_, err := inputFile.Read(buffer[1:])
+	fatalOnError(err, "Error in reading input file")
+
+	for _, conn := range conns {
+		_, err := conn.Write(buffer)
+		fatalOnError(err, "Error in writing to connection")
+	}
 }
 
 func main() {
@@ -125,33 +177,25 @@ func main() {
 	/*
 		Implement Distributed Sort
 	*/
+	go processRecords()
 	connsInProcess = len(scs.Servers)
-	fmt.Println("Number of servers:", connsInProcess)
 
 	// step 1: begin listening
 	serverAddress := net.JoinHostPort(scs.Servers[serverId].Host, scs.Servers[serverId].Port)
 	listener := initListener(serverId, serverAddress, scs)
 	defer listener.Close()
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go acceptConnection(listener, &wg)
 
 	// step 2: dial other servers
 	conns := connectToAllServers(scs, serverId)
+	defer connsClose(conns)
 
-	defer func() {
-		for _, conn := range conns {
-			conn.Close()
-		}
-	}()
+	// step 3: send a record to other servers
+	inputFile := openInputFile(os.Args[2])
+	defer inputFile.Close()
+	sendRecords(inputFile, conns)
 
-	// step 3: send "hi" to other servers
-	for _, conn := range conns {
-		_, err := conn.Write([]byte("hi"))
-		if err != nil {
-			log.Fatalf("Error in writing to connection %v", err)
-		}
-	}
 	wg.Wait()
 }
