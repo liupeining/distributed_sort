@@ -129,7 +129,7 @@ func openInputFile(inputFilePath string) *os.File {
 
 func processRecords() {
 	for record := range recordsChan {
-		fmt.Println("Processed record:", record)
+		//fmt.Println("Processed record:", record)
 		recordsMutex.Lock()
 		records = append(records, record)
 		recordsMutex.Unlock()
