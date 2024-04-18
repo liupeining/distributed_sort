@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -19,6 +21,8 @@ type Record struct {
 }
 
 var recordsChan = make(chan Record)
+var records []Record
+var recordsMutex sync.Mutex
 
 type ServerConfigs struct {
 	Servers []struct {
@@ -55,14 +59,13 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
 	defer wg.Done()
 	buffer := make([]byte, 101)
 	for {
-		n, err := conn.Read(buffer)
+		_, err := conn.Read(buffer)
 		if err != nil {
 			if err != io.EOF {
 				fmt.Println("Error in reading data from", conn.RemoteAddr(), err)
 			}
 			break
 		}
-		fmt.Println("Received", n, "bytes from", conn.RemoteAddr())
 		if buffer[0] == 1 {
 			break
 		} else {
@@ -118,6 +121,9 @@ func openInputFile(inputFilePath string) *os.File {
 func processRecords() {
 	for record := range recordsChan {
 		fmt.Println("Processed record:", record)
+		recordsMutex.Lock()
+		records = append(records, record)
+		recordsMutex.Unlock()
 	}
 }
 
@@ -149,6 +155,21 @@ func sendRecords(inputFile *os.File, conns []net.Conn) {
 			_, err := conn.Write(buffer)
 			fatalOnError(err, "Error in writing to connection")
 		}
+	}
+}
+
+func sortRecordsAndSave(outputFilePath string) {
+	sort.Slice(records, func(i, j int) bool {
+		return bytes.Compare(records[i].Key[:], records[j].Key[:]) < 0
+	})
+	output, err := os.Create(outputFilePath)
+	fatalOnError(err, fmt.Sprintf("Error in creating output file %s", outputFilePath))
+	defer output.Close()
+	for _, record := range records {
+		_, err := output.Write(record.Key[:])
+		fatalOnError(err, "Error in writing to file")
+		_, err = output.Write(record.Value[:])
+		fatalOnError(err, "Error in writing to file")
 	}
 }
 
@@ -195,4 +216,8 @@ func main() {
 
 	wg.Wait()
 	close(recordsChan)
+
+	// step 4: sort records received from other servers
+	sortRecordsAndSave(os.Args[3])
+	log.Printf("Sorting %s to %s\n", os.Args[1], os.Args[2])
 }
