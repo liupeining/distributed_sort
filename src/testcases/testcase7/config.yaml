@@ -1,0 +1,49 @@
+servers:
+  - serverId: 0
+    host: "localhost"
+    port: "8080"
+  - serverId: 1
+    host: "localhost"
+    port: "8081"
+  - serverId: 2
+    host: "localhost"
+    port: "8082"
+  - serverId: 3
+    host: "localhost"
+    port: "8083"
+  - serverId: 4
+    host: "localhost"
+    port: "8084"
+  - serverId: 5
+    host: "localhost"
+    port: "8085"
+  - serverId: 6
+    host: "localhost"
+    port: "8086"
+  - serverId: 7
+    host: "localhost"
+    port: "8087"
+  - serverId: 8
+    host: "localhost"
+    port: "8088"
+  - serverId: 9
+    host: "localhost"
+    port: "8089"
+  - serverId: 10
+    host: "localhost"
+    port: "8090"
+  - serverId: 11
+    host: "localhost"
+    port: "8091"
+  - serverId: 12
+    host: "localhost"
+    port: "8092"
+  - serverId: 13
+    host: "localhost"
+    port: "8093"
+  - serverId: 14
+    host: "localhost"
+    port: "8094"
+  - serverId: 15
+    host: "localhost"
+    port: "8095"

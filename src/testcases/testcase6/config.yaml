@@ -1,0 +1,25 @@
+servers:
+  - serverId: 0
+    host: "localhost"
+    port: "8080"
+  - serverId: 1
+    host: "localhost"
+    port: "8081"
+  - serverId: 2
+    host: "localhost"
+    port: "8082"
+  - serverId: 3
+    host: "localhost"
+    port: "8083"
+  - serverId: 4
+    host: "localhost"
+    port: "8084"
+  - serverId: 5
+    host: "localhost"
+    port: "8085"
+  - serverId: 6
+    host: "localhost"
+    port: "8086"
+  - serverId: 7
+    host: "localhost"
+    port: "8087"
