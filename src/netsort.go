@@ -236,7 +236,7 @@ func main() {
 
 	wg.Wait()
 	defer close(recordsChan)
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// step 4: sort records received from other servers
 	sortRecordsAndSave(os.Args[3])
