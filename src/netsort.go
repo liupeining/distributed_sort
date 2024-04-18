@@ -53,7 +53,7 @@ func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Lis
 func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 	defer conn.Close()
 	defer wg.Done()
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 101)
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
@@ -72,7 +72,7 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 			fmt.Println("Received record", record)
 			recordsChan <- record
 
-			break // temporary break
+			//break // temporary break
 		}
 	}
 }
@@ -128,14 +128,37 @@ func connsClose(conns []net.Conn) {
 
 func sendRecords(inputFile *os.File, conns []net.Conn) {
 	//(for now, just the first record in input file)
-	buffer := make([]byte, 101)
-	buffer[0] = 0
-	_, err := inputFile.Read(buffer[1:])
-	fatalOnError(err, "Error in reading input file")
+	//buffer := make([]byte, 101)
+	//buffer[0] = 0
+	//_, err := inputFile.Read(buffer[1:])
+	//fatalOnError(err, "Error in reading input file")
+	//
+	//for _, conn := range conns {
+	//	_, err := conn.Write(buffer)
+	//	fatalOnError(err, "Error in writing to connection")
+	//}
 
-	for _, conn := range conns {
-		_, err := conn.Write(buffer)
-		fatalOnError(err, "Error in writing to connection")
+	// Read input data and send to others
+	buffer := make([]byte, 101)
+	for {
+		buffer[0] = 0
+		_, err := inputFile.Read(buffer[1:])
+		if err != nil {
+			if err == io.EOF {
+				buffer[0] = 1
+				for _, conn := range conns {
+					_, err := conn.Write(buffer)
+					fatalOnError(err, "Error in writing to connection")
+				}
+				break
+			} else {
+				fatalOnError(err, "Error in reading input file")
+			}
+		}
+		for _, conn := range conns {
+			_, err := conn.Write(buffer)
+			fatalOnError(err, "Error in writing to connection")
+		}
 	}
 }
 
