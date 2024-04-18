@@ -13,9 +13,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//var connsInProcess int
-//var mutex sync.Mutex
-
 type Record struct {
 	Key   [10]byte
 	Value [90]byte
@@ -33,14 +30,11 @@ type ServerConfigs struct {
 
 func readServerConfigs(configPath string) ServerConfigs {
 	f, err := os.ReadFile(configPath)
-
 	if err != nil {
 		log.Fatalf("could not read config file %s : %v", configPath, err)
 	}
-
 	scs := ServerConfigs{}
 	err = yaml.Unmarshal(f, &scs)
-
 	return scs
 }
 
@@ -70,32 +64,16 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 		}
 		fmt.Println("Received", n, "bytes from", conn.RemoteAddr())
 		if buffer[0] == 1 {
-			//mutex.Lock()
-			//connsInProcess--
-			//mutex.Unlock()
 			break
-		}
-		if buffer[0] == 0 {
+		} else {
 			var record Record
 			copy(record.Key[:], buffer[1:11])
 			copy(record.Value[:], buffer[11:])
 			fmt.Println("Received record", record)
 			recordsChan <- record
 
-			// temporary break
-			break
-			//// temproary because we are not using the stream_complete
-			//mutex.Lock()
-			//connsInProcess--
-			//mutex.Unlock()
+			break // temporary break
 		}
-		//if connsInProcess == 1 {
-		//	fmt.Println(">>>>>>>>>>>>All connections received")
-		//	wg.Done()
-		//	close(recordsChan)
-		//	break
-		//}
-
 	}
 }
 
@@ -182,8 +160,8 @@ func main() {
 	/*
 		Implement Distributed Sort
 	*/
+
 	go processRecords()
-	//connsInProcess = len(scs.Servers)
 
 	// step 1: begin listening
 	serverAddress := net.JoinHostPort(scs.Servers[serverId].Host, scs.Servers[serverId].Port)
