@@ -69,16 +69,25 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
 		if buffer[0] == 1 {
 			break
 		} else {
-			parsedServerId := (buffer[1] & 0xC0) >> 6
-			if int(parsedServerId) != serverId {
+			bufferID := getBufferID(buffer)
+			if bufferID != serverId {
 				continue
 			}
-			var record Record
-			copy(record.Key[:], buffer[1:11])
-			copy(record.Value[:], buffer[11:])
+			record := buffer2Record(buffer)
 			recordsChan <- record
 		}
 	}
+}
+
+func getBufferID(buffer []byte) int {
+	return int((buffer[1] & 0xC0) >> 6)
+}
+
+func buffer2Record(buffer []byte) Record {
+	var record Record
+	copy(record.Key[:], buffer[1:11])
+	copy(record.Value[:], buffer[11:])
+	return record
 }
 
 func acceptConnection(listener net.Listener, wg *sync.WaitGroup, serverId int) {
