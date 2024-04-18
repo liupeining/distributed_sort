@@ -135,11 +135,11 @@ func openInputFile(inputFilePath string) *os.File {
 }
 
 func processRecords() {
+	recordsMutex.Lock()
 	for record := range recordsChan {
-		recordsMutex.Lock()
 		records = append(records, record)
-		recordsMutex.Unlock()
 	}
+	recordsMutex.Unlock()
 }
 
 func connsClose(conns []net.Conn) {
@@ -214,7 +214,7 @@ func main() {
 	/*
 		Implement Distributed Sort
 	*/
-
+	var wg sync.WaitGroup
 	go processRecords()
 	nodesCount := len(scs.Servers)
 
@@ -222,7 +222,6 @@ func main() {
 	serverAddress := net.JoinHostPort(scs.Servers[serverId].Host, scs.Servers[serverId].Port)
 	listener := initListener(serverId, serverAddress, scs)
 	defer listener.Close()
-	var wg sync.WaitGroup
 	wg.Add(nodesCount - 1)
 	go acceptConnection(listener, &wg, serverId, nodesCount)
 
