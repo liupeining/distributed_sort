@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"sort"
@@ -54,7 +55,7 @@ func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Lis
 	return listener
 }
 
-func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
+func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int, nodesCount int) {
 	defer conn.Close()
 	defer wg.Done()
 	buffer := make([]byte, 101)
@@ -69,7 +70,7 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
 		if buffer[0] == 1 {
 			break
 		} else {
-			bufferID := getBufferID(buffer)
+			bufferID := getBufferID(buffer, nodesCount)
 			if bufferID != serverId {
 				continue
 			}
@@ -79,8 +80,14 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
 	}
 }
 
-func getBufferID(buffer []byte) int {
-	return int((buffer[1] & 0xC0) >> 6)
+func getBufferID(buffer []byte, nodesCount int) int {
+	//return int((buffer[1] & 0xC0) >> 6)
+	if nodesCount <= 1 {
+		return 0
+	}
+	bits := int(math.Ceil(math.Log2(float64(nodesCount))))
+	mask := (1<<bits - 1) << (8 - bits)
+	return int((buffer[1] & byte(mask)) >> (8 - bits))
 }
 
 func buffer2Record(buffer []byte) Record {
@@ -90,11 +97,11 @@ func buffer2Record(buffer []byte) Record {
 	return record
 }
 
-func acceptConnection(listener net.Listener, wg *sync.WaitGroup, serverId int) {
+func acceptConnection(listener net.Listener, wg *sync.WaitGroup, serverId int, nodesCount int) {
 	for {
 		conn, err := listener.Accept()
 		fatalOnError(err, "Could not accept connection")
-		go handleConnection(conn, wg, serverId)
+		go handleConnection(conn, wg, serverId, nodesCount)
 	}
 }
 
@@ -129,7 +136,6 @@ func openInputFile(inputFilePath string) *os.File {
 
 func processRecords() {
 	for record := range recordsChan {
-		//fmt.Println("Processed record:", record)
 		recordsMutex.Lock()
 		records = append(records, record)
 		recordsMutex.Unlock()
@@ -142,7 +148,7 @@ func connsClose(conns []net.Conn) {
 	}
 }
 
-func sendRecords(inputFile *os.File, conns []net.Conn, serverId int) {
+func sendRecords(inputFile *os.File, conns []net.Conn, serverId int, nodesCount int) {
 	buffer := make([]byte, 101)
 	for {
 		buffer[0] = 0
@@ -159,8 +165,7 @@ func sendRecords(inputFile *os.File, conns []net.Conn, serverId int) {
 				fatalOnError(err, "Error in reading input file")
 			}
 		}
-
-		bufferID := getBufferID(buffer)
+		bufferID := getBufferID(buffer, nodesCount)
 		if bufferID == serverId {
 			record := buffer2Record(buffer)
 			recordsChan <- record
@@ -211,26 +216,28 @@ func main() {
 	*/
 
 	go processRecords()
+	nodesCount := len(scs.Servers)
 
 	// step 1: begin listening
 	serverAddress := net.JoinHostPort(scs.Servers[serverId].Host, scs.Servers[serverId].Port)
 	listener := initListener(serverId, serverAddress, scs)
 	defer listener.Close()
 	var wg sync.WaitGroup
-	wg.Add(len(scs.Servers) - 1)
-	go acceptConnection(listener, &wg, serverId)
+	wg.Add(nodesCount - 1)
+	go acceptConnection(listener, &wg, serverId, nodesCount)
 
 	// step 2: dial other servers
 	conns := connectToAllServers(scs, serverId)
 	defer connsClose(conns)
 
-	// step 3: send a record to other servers
+	// step 3: send records to other servers
 	inputFile := openInputFile(os.Args[2])
 	defer inputFile.Close()
-	sendRecords(inputFile, conns, serverId)
+	sendRecords(inputFile, conns, serverId, nodesCount)
 
 	wg.Wait()
-	close(recordsChan)
+	defer close(recordsChan)
+	time.Sleep(250 * time.Millisecond)
 
 	// step 4: sort records received from other servers
 	sortRecordsAndSave(os.Args[3])
