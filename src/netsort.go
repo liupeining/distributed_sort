@@ -50,7 +50,7 @@ func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Lis
 	return listener
 }
 
-func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
+func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int) {
 	defer conn.Close()
 	defer wg.Done()
 	buffer := make([]byte, 101)
@@ -66,22 +66,23 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup) {
 		if buffer[0] == 1 {
 			break
 		} else {
+			parsedServerId := (buffer[1] & 0xC0) >> 6
+			if int(parsedServerId) != serverId {
+				continue
+			}
 			var record Record
 			copy(record.Key[:], buffer[1:11])
 			copy(record.Value[:], buffer[11:])
-			fmt.Println("Received record", record)
 			recordsChan <- record
-
-			//break // temporary break
 		}
 	}
 }
 
-func acceptConnection(listener net.Listener, wg *sync.WaitGroup) {
+func acceptConnection(listener net.Listener, wg *sync.WaitGroup, serverId int) {
 	for {
 		conn, err := listener.Accept()
 		fatalOnError(err, "Could not accept connection")
-		go handleConnection(conn, wg)
+		go handleConnection(conn, wg, serverId)
 	}
 }
 
@@ -127,17 +128,6 @@ func connsClose(conns []net.Conn) {
 }
 
 func sendRecords(inputFile *os.File, conns []net.Conn) {
-	//(for now, just the first record in input file)
-	//buffer := make([]byte, 101)
-	//buffer[0] = 0
-	//_, err := inputFile.Read(buffer[1:])
-	//fatalOnError(err, "Error in reading input file")
-	//
-	//for _, conn := range conns {
-	//	_, err := conn.Write(buffer)
-	//	fatalOnError(err, "Error in writing to connection")
-	//}
-
 	// Read input data and send to others
 	buffer := make([]byte, 101)
 	for {
@@ -192,7 +182,7 @@ func main() {
 	defer listener.Close()
 	var wg sync.WaitGroup
 	wg.Add(len(scs.Servers) - 1)
-	go acceptConnection(listener, &wg)
+	go acceptConnection(listener, &wg, serverId)
 
 	// step 2: dial other servers
 	conns := connectToAllServers(scs, serverId)
