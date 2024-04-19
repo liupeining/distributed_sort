@@ -60,7 +60,11 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int, nodesCoun
 	defer wg.Done()
 	buffer := make([]byte, 101)
 	for {
-		_, err := conn.Read(buffer)
+		n, err := conn.Read(buffer)
+		//if n != 101 {
+		//	log.Panicf("Error in reading data from %s, expected 101 bytes, got %d", conn.RemoteAddr(), n)
+		//}
+		fmt.Println("number of bytes read:", n)
 		if err != nil {
 			if err != io.EOF {
 				fmt.Println("Error in reading data from", conn.RemoteAddr(), err)
@@ -157,7 +161,7 @@ func sendRecords(inputFile *os.File, conns []net.Conn, serverId int, nodesCount 
 			if err == io.EOF {
 				buffer[0] = 1
 				for _, conn := range conns {
-					_, err := conn.Write(buffer[:1])
+					_, err := conn.Write(buffer)
 					fatalOnError(err, "Error in writing to connection")
 				}
 				break
