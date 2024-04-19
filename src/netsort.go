@@ -58,17 +58,23 @@ func initListener(serverId int, serverAddress string, scs ServerConfigs) net.Lis
 func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int, nodesCount int) {
 	defer conn.Close()
 	defer wg.Done()
-	buffer := make([]byte, 101)
 	for {
-		n, err := conn.Read(buffer)
-		//if n != 101 {
-		//	log.Panicf("Error in reading data from %s, expected 101 bytes, got %d", conn.RemoteAddr(), n)
-		//}
-		fmt.Println("number of bytes read:", n)
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("Error in reading data from", conn.RemoteAddr(), err)
+		buffer := make([]byte, 0, 101)
+		bytesRead := 0
+		for bytesRead < 101 {
+			buf := make([]byte, 101-bytesRead)
+			n, err := conn.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					fmt.Println("Error in reading data from", conn.RemoteAddr(), err)
+				}
+				break
 			}
+			bytesRead += n
+			buffer = append(buffer, buf[:n]...)
+		}
+		if len(buffer) != 101 {
+			fmt.Println("Error in reading data from", conn.RemoteAddr(), "expected 101 bytes, got", len(buffer))
 			break
 		}
 		if buffer[0] == 1 {
@@ -85,7 +91,6 @@ func handleConnection(conn net.Conn, wg *sync.WaitGroup, serverId int, nodesCoun
 }
 
 func getBufferID(buffer []byte, nodesCount int) int {
-	//return int((buffer[1] & 0xC0) >> 6)
 	if nodesCount <= 1 {
 		return 0
 	}
